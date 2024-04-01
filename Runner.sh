@@ -5,40 +5,42 @@ SERVER_PORT=25565		# This check if server is running, have to change port in ser
 RAM_MAX_WORLD_MEMORY=2G	# This should depend on world folder size, be careful, set enough to allocate your world folder.
 BACKUP_INTERVAL=300		# 5 Minutes
 
+DoBackup() {
+    echo Creating Backup...
+    tar -cf world_$(date +"%Y%m%d%H%M%S").tar -C world/ .
+    echo Backup Done!
+}
+
 echo Checking if World folder exists...
 
 if [ ! -d world ]; then
-    echo World folder doesnt exists. Creating...
-    mkdir -p world
-    echo Done!
+	echo "World folder doesn't exists. Creating..."
+	mkdir -p world
+	echo Done!
 fi
 
 echo Checking if World folder is mounted in RAM...
 
 if ! mount | grep -q "root/world"; then
-    echo Mounting World folder in RAM...
-    mount -t tmpfs -o size=$RAM_MAX_WORLD_MEMORY tmpfs /root/world
-    echo "World folder mounted in RAM (RESERVED SPACE IN RAM: $RAM_MAX_WORLD_MEMORY)."
+	echo Mounting World folder in RAM...
+	mount -t tmpfs -o size=$RAM_MAX_WORLD_MEMORY tmpfs /root/world
+	echo "World folder mounted in RAM (RESERVED SPACE IN RAM: $RAM_MAX_WORLD_MEMORY)."
 fi
 
 if [ -z "$(find world -mindepth 1)" ]; then
-    echo Decompressing the last Backup in the World folder...
-    tar -xf "$(ls -t world_*.tar | head -n 1)" -C world/
-    echo Done!
+	echo Decompressing the last Backup in the World folder...
+	tar -xf "$(ls -t world_*.tar | head -n 1)" -C world/
+	echo Done!
 fi
 
 (while true; do
 	echo Checking if Server in Online...
 
 	if lsof -i :"$SERVER_PORT" >/dev/null; then
-		echo Creating Backup...
+		DoBackup
+	fi
 
-        tar -cf world_$(date +"%Y%m%d%H%M%S").tar -C world/ .
-
-        echo Done!
-    fi
-
-    sleep $BACKUP_INTERVAL
+	sleep $BACKUP_INTERVAL
 done) &
 
 BACKUP_PID=$!
@@ -51,7 +53,11 @@ echo Executing Server...
 #screen -dmS mc_server java -Xmx4096M @libraries/net/minecraftforge/forge/1.20.1-47.2.20/unix_args.txt
 java -Xmx${SERVER_MAX_MEMORY} @libraries/net/minecraftforge/forge/1.20.1-47.2.20/unix_args.txt
 
-echo Done!
+while ! lsof -i :"$SERVER_PORT" >/dev/null; do
+    sleep 1
+done
+
+DoBackup
 
 echo Unmounting the World folder from RAM...
 umount /root/world
