@@ -2,14 +2,8 @@
 
 SERVER_MAX_MEMORY=4096M	# Max Minecraft Server RAM allocation.
 SERVER_PORT=25565		# This check if server is running, have to change port in server.properties also.
-RAM_MAX_WORLD_MEMORY=2G	# This should depend on world folder size, be careful, set enough to allocate your world folder.
-BACKUP_INTERVAL=300		# 5 Minutes
-
-DoBackup() {
-    echo Creating Backup...
-    tar -cf world_$(date +"%Y%m%d%H%M%S").tar -C world/ .
-    echo Backup Done!
-}
+RAM_MAX_WORLD_MEMORY=3G	# This should depend on world folder size, be careful, set enough to allocate your world folder.
+BACKUP_INTERVAL=300		# Value: 300 equals 5 Minutes 
 
 echo Checking if World folder exists...
 
@@ -24,45 +18,94 @@ echo Checking if World folder is mounted in RAM...
 if ! mount | grep -q "root/world"; then
 	echo Mounting World folder in RAM...
 	mount -t tmpfs -o size=$RAM_MAX_WORLD_MEMORY tmpfs /root/world
-	echo "World folder mounted in RAM (RESERVED SPACE IN RAM: $RAM_MAX_WORLD_MEMORY)."
+	echo "Done! (RESERVED SPACE IN RAM: $RAM_MAX_WORLD_MEMORY)."
 fi
 
 if [ -z "$(find world -mindepth 1)" ]; then
 	echo Decompressing the last Backup in the World folder...
 	tar -xf "$(ls -t world_*.tar | head -n 1)" -C world/
 	echo Done!
+
+	echo Searching old Backups...
+	recent_backups=$(ls -t world_*.tar | head -n 3)
+
+	for backup in $(ls world_*.tar); do
+		is_recent=false
+		for recent_backup in $recent_backups; do
+			if [ "$backup" = "$recent_backup" ]; then
+				is_recent=true
+				break
+			fi
+		done
+
+		if [ "$is_recent" = false ]; then
+			rm "$backup"
+			echo "Old Backup: $backup was deleted."
+		fi
+	done
+
+	echo Done!
 fi
 
-(while true; do
-	echo Checking if Server in Online...
+screen -dmS minecraft_server bash -c '
+	DoBackup() {
+		echo Creating Backup...
+		tar -cf world_$(date +"%Y%m%d%H%M%S").tar -C world/ .
+		echo Done!
 
-	if lsof -i :"$SERVER_PORT" >/dev/null; then
-		DoBackup
-	fi
+		if [ -z "$(find world -mindepth 1)" ]; then
+			echo Searching old Backups...
+			recent_backups=$(ls -t world_*.tar | head -n 3)
 
-	sleep $BACKUP_INTERVAL
-done) &
+			for backup in $(ls world_*.tar); do
+				is_recent=false
+				for recent_backup in $recent_backups; do
+					if [ "$backup" = "$recent_backup" ]; then
+						is_recent=true
+						break
+					fi
+				done
 
-BACKUP_PID=$!
+				if [ "$is_recent" = false ]; then
+					rm "$backup"
+					echo "Old Backup: $backup was deleted."
+				fi
+			done
 
-echo Executing Server...
-# Running in background
-#java -Xmx4096M @libraries/net/minecraftforge/forge/1.20.1-47.2.20/unix_args.txt &
+			echo Done!
+		fi
+	}
+	
+	BackupLoop() {
+		while true; do
+			if lsof -i :'"$SERVER_PORT"' >/dev/null; then
+				DoBackup
+			fi
 
-# Using screen
-#screen -dmS mc_server java -Xmx4096M @libraries/net/minecraftforge/forge/1.20.1-47.2.20/unix_args.txt
-java -Xmx${SERVER_MAX_MEMORY} @libraries/net/minecraftforge/forge/1.20.1-47.2.20/unix_args.txt
+			sleep '$BACKUP_INTERVAL'
+		done
+	}
 
-while ! lsof -i :"$SERVER_PORT" >/dev/null; do
-    sleep 1
-done
+	echo Starting Auto Backup Process...
+	BackupLoop &
 
-DoBackup
+	BACKUP_PID=$!
 
-echo Unmounting the World folder from RAM...
-umount /root/world
-echo Done!
+	echo Starting Server...
+	java -Xmx'${SERVER_MAX_MEMORY}' @libraries/net/minecraftforge/forge/1.20.1-47.2.20/unix_args.txt ;
 
-echo Stopping Backup Process...
-kill $BACKUP_PID
-echo Bye.
+	echo Stopping Auto Backup Process...
+	kill $BACKUP_PID > /dev/null 2>&1
+
+	echo Executing a last Backup...
+	DoBackup
+
+	echo Unmounting the World folder from RAM...
+	umount /root/world
+	echo Done!
+
+	# NOTE: Finally its is not good idea haha
+	#shutdown now
+'
+
+echo "Minecraft Server and Backup process started. You can access to it using: screen -r minecraft_server"
