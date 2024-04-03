@@ -5,6 +5,12 @@ SERVER_PORT=25565		# This check if server is running, have to change port in ser
 RAM_MAX_WORLD_MEMORY=3G	# This should depend on world folder size, be careful, set enough to allocate your world folder.
 BACKUP_INTERVAL=300		# Value: 300 equals 5 Minutes 
 
+echo ' ___      _             _                   _'
+echo '| _ \_  _| |_ ___   ___| |  __ _ _  _ ___  | |___ ___'
+echo '|  _/ || |  _/ _ \ / -_) | / _` | || / -_) | / -_) -_)'
+echo '|_|  \_,_|\__\___/ \___|_| \__, |\_,_\___| |_\___\___|'
+echo '                              |_|'
+
 echo Checking if World folder exists...
 
 if [ ! -d world ]; then
@@ -22,9 +28,11 @@ if ! mount | grep -q "root/world"; then
 fi
 
 if [ -z "$(find world -mindepth 1)" ]; then
-	echo Decompressing the last Backup in the World folder...
-	tar -xf "$(ls -t world_*.tar | head -n 1)" -C world/
-	echo Done!
+	if [ ! "$1" = "skip_recover_world" ]; then
+		echo Decompressing the last Backup in the World folder...
+		tar -xf "$(ls -t world_*.tar | head -n 1)" -C world/
+		echo Done!
+	fi
 
 	echo Searching old Backups...
 	recent_backups=$(ls -t world_*.tar | head -n 3)
