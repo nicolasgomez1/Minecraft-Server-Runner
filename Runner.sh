@@ -36,17 +36,20 @@ fi
 screen -dmS minecraft_server bash -c '
 	DoBackup() {
 		echo Creating Backup...
+		screen -S minecraft_server -X stuff "say Creating Backup...\n"
 		tar -cf world_$(date +"%Y%m%d%H%M%S").tar -C world/ .
 		echo Done!
+		screen -S minecraft_server -X stuff "say Done!\n"
 
 		echo Searching old Backups...
-		BACKUPS_COUNT=$(find . -maxdepth 1 -type f -name "world_*.tar" 2>/dev/null | wc -l)
+		BACKUPS_COUNT=$(ls -1 world_*.tar 2>/dev/null | wc -l)
+
 		if [ "$BACKUPS_COUNT" -gt 3 ]; then
-			find . -maxdepth 1 -type f -name "world_*.tar" -exec ls -t {} + | tail -n +"$((BACKUPS_COUNT - 2))" | while IFS= read -r OLD_BACKUP; do
-				if [[ "$OLD_BACKUP" == world_*.tar ]]; then
-					rm "$OLD_BACKUP"
-					echo "Old Backup: $OLD_BACKUP was deleted."
-				fi
+			OLD_BACKUPS=$(ls -1tr world_*.tar | head -n -3)
+
+			for OLD_BACKUP in $OLD_BACKUPS; do
+				rm "$OLD_BACKUP"
+				echo "Old Backup: $OLD_BACKUP was deleted."
 			done
 		fi
 		echo Done!
@@ -76,9 +79,9 @@ screen -dmS minecraft_server bash -c '
 	echo Executing a last Backup...
 	DoBackup
 
-	echo Unmounting the World folder from RAM...
-	umount /root/world
-	echo Done!
+	#echo Unmounting the World folder from RAM...
+	#umount /root/world
+	#echo Done!
 
 	# NOTE: Finally its is not good idea haha
 	#shutdown now
