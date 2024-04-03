@@ -21,7 +21,7 @@ fi
 
 echo Checking if World folder is mounted in RAM...
 
-if [ ! mount | grep -q "root/world" ]; then
+if ! mount | grep -q "root/world"; then
 	echo Mounting World folder in RAM...
 	mount -t tmpfs -o size=$RAM_MAX_WORLD_MEMORY tmpfs /root/world
 	echo "Done! (RESERVED SPACE IN RAM: $RAM_MAX_WORLD_MEMORY)."
