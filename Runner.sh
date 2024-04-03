@@ -21,37 +21,15 @@ fi
 
 echo Checking if World folder is mounted in RAM...
 
-if ! mount | grep -q "root/world"; then
+if [ ! mount | grep -q "root/world" ]; then
 	echo Mounting World folder in RAM...
 	mount -t tmpfs -o size=$RAM_MAX_WORLD_MEMORY tmpfs /root/world
 	echo "Done! (RESERVED SPACE IN RAM: $RAM_MAX_WORLD_MEMORY)."
 fi
 
-if [ -z "$(find world -mindepth 1)" ]; then
-	if [ ! "$1" = "skip_recover_world" ]; then
-		echo Decompressing the last Backup in the World folder...
-		tar -xf "$(ls -t world_*.tar | head -n 1)" -C world/
-		echo Done!
-	fi
-
-	echo Searching old Backups...
-	recent_backups=$(ls -t world_*.tar | head -n 3)
-
-	for backup in $(ls world_*.tar); do
-		is_recent=false
-		for recent_backup in $recent_backups; do
-			if [ "$backup" = "$recent_backup" ]; then
-				is_recent=true
-				break
-			fi
-		done
-
-		if [ "$is_recent" = false ]; then
-			rm "$backup"
-			echo "Old Backup: $backup was deleted."
-		fi
-	done
-
+if [ "$1" != "skip_recover_world" ] && [ -z "$(find world -mindepth 1)" ]; then
+	echo Decompressing the last Backup in the World folder...
+	tar -xf "$(ls -t world_*.tar | head -n 1)" -C world/
 	echo Done!
 fi
 
@@ -61,27 +39,17 @@ screen -dmS minecraft_server bash -c '
 		tar -cf world_$(date +"%Y%m%d%H%M%S").tar -C world/ .
 		echo Done!
 
-		if [ -z "$(find world -mindepth 1)" ]; then
-			echo Searching old Backups...
-			recent_backups=$(ls -t world_*.tar | head -n 3)
-
-			for backup in $(ls world_*.tar); do
-				is_recent=false
-				for recent_backup in $recent_backups; do
-					if [ "$backup" = "$recent_backup" ]; then
-						is_recent=true
-						break
-					fi
-				done
-
-				if [ "$is_recent" = false ]; then
-					rm "$backup"
-					echo "Old Backup: $backup was deleted."
+		echo Searching old Backups...
+		BACKUPS_COUNT=$(find . -maxdepth 1 -type f -name "world_*.tar" 2>/dev/null | wc -l)
+		if [ "$BACKUPS_COUNT" -gt 3 ]; then
+			find . -maxdepth 1 -type f -name "world_*.tar" -exec ls -t {} + | tail -n +"$((BACKUPS_COUNT - 2))" | while IFS= read -r OLD_BACKUP; do
+				if [[ "$OLD_BACKUP" == world_*.tar ]]; then
+					rm "$OLD_BACKUP"
+					echo "Old Backup: $OLD_BACKUP was deleted."
 				fi
 			done
-
-			echo Done!
 		fi
+		echo Done!
 	}
 	
 	BackupLoop() {
@@ -100,7 +68,7 @@ screen -dmS minecraft_server bash -c '
 	BACKUP_PID=$!
 
 	echo Starting Server...
-	java -Xmx'${SERVER_MAX_MEMORY}' @libraries/net/minecraftforge/forge/1.20.1-47.2.20/unix_args.txt ;
+	java -Xmx'"${SERVER_MAX_MEMORY}"' @libraries/net/minecraftforge/forge/1.20.1-47.2.20/unix_args.txt ;
 
 	echo Stopping Auto Backup Process...
 	kill $BACKUP_PID > /dev/null 2>&1
